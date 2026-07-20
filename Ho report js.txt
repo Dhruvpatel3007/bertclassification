@@ -1,0 +1,78 @@
+const sql = require("mssql");
+const xlsx = require("xlsx");
+
+
+const config = {
+    user: "your_username",
+    password: "your_password",
+    server: "your_server",
+    database: "your_database",
+    options: {
+        trustServerCertificate: true,
+        encrypt: false
+    }
+};
+
+
+async function importExcel() {
+    try {
+        await sql.connect(config);
+
+
+        // Read Excel
+        const workbook = xlsx.readFile("data.xlsx");
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
+
+
+        const table = new sql.Table("HO_Complaints_Email_Data");
+        table.create = false;
+
+
+        table.columns.add("Buss_Id", sql.NVarChar(50), { nullable: true });
+        table.columns.add("Received_Date", sql.NVarChar(50), { nullable: true });
+        table.columns.add("Sender", sql.NVarChar(150), { nullable: true });
+        table.columns.add("Subject", sql.NVarChar(500), { nullable: true });
+        table.columns.add("Email_Message", sql.NVarChar(sql.MAX), { nullable: true });
+        table.columns.add("Ho_Cs_Query_Type", sql.NVarChar(400), { nullable: true });
+        table.columns.add("Category_Code", sql.NVarChar(50), { nullable: true });
+        table.columns.add("Classified_By", sql.NVarChar(50), { nullable: true });
+        table.columns.add("Action_Taken", sql.NVarChar(50), { nullable: true });
+        table.columns.add("Reply_Mail_Sent", sql.NVarChar(50), { nullable: true });
+        table.columns.add("Grievance_Id", sql.NVarChar(50), { nullable: true });
+        table.columns.add("Account_Number", sql.NVarChar(50), { nullable: true });
+        table.columns.add("Completed_Date", sql.NVarChar(50), { nullable: true });
+
+
+        rows.forEach(row => {
+            table.rows.add(
+                row.Buss_Id,
+                row.Received_Date,
+                row.Sender,
+                row.Subject,
+                row.Email_Message,
+                row.Ho_Cs_Query_Type,
+                row.Category_Code,
+                row.Classified_By,
+                row.Action_Taken,
+                row.Reply_Mail_Sent,
+                row.Grievance_Id,
+                row.Account_Number,
+                row.Completed_Date
+            );
+        });
+
+
+        await new sql.Request().bulk(table);
+
+
+        console.log(`${rows.length} records inserted successfully.`);
+    } catch (err) {
+        console.error(err);
+    } finally {
+        await sql.close();
+    }
+}
+
+
+importExcel();
