@@ -1,0 +1,149 @@
+const sql = require("mssql");
+const xlsx = require("xlsx");
+
+
+async function importExcel(config, excelPath) {
+    let pool;
+
+
+    try {
+        pool = await sql.connect(config);
+
+
+        // Read Excel
+        const workbook = xlsx.readFile(excelPath);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
+
+
+        console.log(`Total Records : ${rows.length}`);
+
+
+        // Clear staging table
+        await pool.request().query("TRUNCATE TABLE dbo.ho_complaints_email_data_stg");
+
+
+        // Create Bulk Table
+        const table = new sql.Table("dbo.ho_complaints_email_data_stg");
+        table.create = false;
+
+
+        table.columns.add("Buss_Id", sql.NVarChar(50), { nullable: false });
+        table.columns.add("Received_Date", sql.NVarChar(50), { nullable: false });
+        table.columns.add("Sender", sql.NVarChar(150), { nullable: false });
+        table.columns.add("Subject", sql.NVarChar(500), { nullable: false });
+        table.columns.add("Email_Message", sql.NVarChar(sql.MAX), { nullable: false });
+        table.columns.add("Ho_Cs_Query_Type", sql.NVarChar(400), { nullable: true });
+        table.columns.add("Category_Code", sql.NVarChar(50), { nullable: false });
+        table.columns.add("Classified_By", sql.NVarChar(50), { nullable: false });
+        table.columns.add("Action_Taken", sql.NVarChar(50), { nullable: false });
+        table.columns.add("Reply_Mail_Sent", sql.NVarChar(50), { nullable: false });
+        table.columns.add("Grievance_Id", sql.NVarChar(50), { nullable: false });
+        table.columns.add("Account_Number", sql.NVarChar(50), { nullable: false });
+        table.columns.add("Completed_Date", sql.NVarChar(50), { nullable: true });
+
+
+        // Add Excel Rows
+        rows.forEach(row => {
+            table.rows.add(
+                row["Buss Id"] || "",
+                row["Received Date"] || "",
+                row["Sender"] || "",
+                row["Subject"] || "",
+                row["Email Message"] || "",
+                row["Ho Cs Query Type"] || null,
+                row["Category Code"] || "",
+                row["Classified By"] || "",
+                row["Action Taken"] || "",
+                row["Reply Mail Sent"] || "",
+                row["Grievance Id"] || "",
+                row["Account Number"] || "",
+                row["Completed Date"] || null
+            );
+        });
+
+
+        // Bulk Insert into Staging Table
+        await pool.request().bulk(table);
+
+
+        console.log("Bulk Insert Completed");
+
+
+        // Merge Data
+        await pool.request().query(`
+            MERGE dbo.ho_complaints_email_data AS TARGET
+            USING dbo.ho_complaints_email_data_stg AS SOURCE
+            ON TARGET.Buss_Id = SOURCE.Buss_Id
+
+
+            WHEN MATCHED THEN
+                UPDATE SET
+                    TARGET.Received_Date = SOURCE.Received_Date,
+                    TARGET.Sender = SOURCE.Sender,
+                    TARGET.Subject = SOURCE.Subject,
+                    TARGET.Email_Message = SOURCE.Email_Message,
+                    TARGET.Ho_Cs_Query_Type = SOURCE.Ho_Cs_Query_Type,
+                    TARGET.Category_Code = SOURCE.Category_Code,
+                    TARGET.Classified_By = SOURCE.Classified_By,
+                    TARGET.Action_Taken = SOURCE.Action_Taken,
+                    TARGET.Reply_Mail_Sent = SOURCE.Reply_Mail_Sent,
+                    TARGET.Grievance_Id = SOURCE.Grievance_Id,
+                    TARGET.Account_Number = SOURCE.Account_Number,
+                    TARGET.Completed_Date = SOURCE.Completed_Date
+
+
+            WHEN NOT MATCHED THEN
+                INSERT
+                (
+                    Buss_Id,
+                    Received_Date,
+                    Sender,
+                    Subject,
+                    Email_Message,
+                    Ho_Cs_Query_Type,
+                    Category_Code,
+                    Classified_By,
+                    Action_Taken,
+                    Reply_Mail_Sent,
+                    Grievance_Id,
+                    Account_Number,
+                    Completed_Date
+                )
+                VALUES
+                (
+                    SOURCE.Buss_Id,
+                    SOURCE.Received_Date,
+                    SOURCE.Sender,
+                    SOURCE.Subject,
+                    SOURCE.Email_Message,
+                    SOURCE.Ho_Cs_Query_Type,
+                    SOURCE.Category_Code,
+                    SOURCE.Classified_By,
+                    SOURCE.Action_Taken,
+                    SOURCE.Reply_Mail_Sent,
+                    SOURCE.Grievance_Id,
+                    SOURCE.Account_Number,
+                    SOURCE.Completed_Date
+                );
+        `);
+
+
+        console.log("Merge Completed Successfully");
+
+
+        // Clear staging table
+        await pool.request().query("TRUNCATE TABLE dbo.ho_complaints_email_data_stg");
+
+
+        console.log("Staging Table Cleared");
+    }
+    catch (err) {
+        console.error(err);
+        throw err;
+    }
+    finally {
+        if (pool)
+            await pool.close();
+    }
+}
