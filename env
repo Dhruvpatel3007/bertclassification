@@ -1,0 +1,6 @@
+# Full path of the Excel file that has the multiple date-named sheets
+INPUT_FILE=C:\Users\YourName\Documents\Bomlaw_mail_format.xlsx
+
+# Full path where the merged, sorted Excel should be saved (optional)
+# If left empty, it is saved next to the input file as <name>_merged_sorted.xlsx
+OUTPUT_FILE=C:\Users\YourName\Documents\Bomlaw_merged_sorted.xlsx
